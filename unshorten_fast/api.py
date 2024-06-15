@@ -1,4 +1,61 @@
-""" Expand URLs from shortening services """
+"""
+Expand URLs from shortening services.
+
+This script takes a file containing short URLs as input, expands them to their original long URLs using asynchronous HTTP requests, and writes the expanded URLs to an output file. It provides options to filter URLs based on domain and length, and supports caching of expanded URLs.
+
+Usage:
+    python api.py <input_file> <output_file> [options]
+
+Arguments:
+    input_file: Path to the file containing short URLs, one per line.
+    output_file: Path to the file where expanded URLs will be written.
+
+Options:
+    -m LEN, --maxlen LEN: Ignore domains longer than LEN characters.
+    -d PATH, --domains PATH: Expand only if the domain is present in the CSV file at PATH.
+    --domains-noheader: Specify that the CSV file with domains has no header row.
+    --no-cache: Disable caching of expanded URLs.
+    --debug: Enable debug logging.
+
+Configuration:
+    TTL_DNS_CACHE: Time-to-live of DNS cache in seconds (default: 300).
+    MAX_TCP_CONN: Maximum number of simultaneous TCP connections (default: 50).
+    TIMEOUT_TOTAL: Timeout for each request in seconds (default: 10).
+
+Functions:
+    make_parser(): Creates an ArgumentParser object with the script's command-line options.
+    unshortenone(url, session, pattern=None, maxlen=None, cache=None, timeout=None): Expands a single short URL using an aiohttp session.
+    gather_with_concurrency(n, *tasks): Runs tasks concurrently with a maximum of n simultaneous tasks.
+    _unshorten(*urls, cache=None, domains=None, maxlen=None): Expands multiple URLs concurrently using the specified options.
+    unshorten(*args, **kwargs): Calls _unshorten() using the provided arguments and keyword arguments.
+    _main(args): Main function that reads input, processes URLs, and writes output.
+    main(): Entry point of the script, parses command-line arguments and calls _main().
+
+Logging:
+    The script uses the logging module to log information and errors. The log format is defined by LOG_FMT, and the log level can be set using the --debug option.
+
+Statistics:
+    The script keeps track of various statistics in the _STATS dictionary:
+        - ignored: Number of URLs ignored due to domain or length filtering.
+        - timeout: Number of requests that timed out.
+        - error: Number of requests that encountered an error.
+        - cached: Number of URLs added to the cache.
+        - cached_retrieved: Number of URLs retrieved from the cache.
+        - expanded: Number of URLs successfully expanded.
+
+Examples:
+    Expand URLs from input.txt and write the expanded URLs to output.txt:
+        python expand_urls.py input.txt output.txt
+
+    Expand URLs with a maximum length of 100 characters:
+        python expand_urls.py input.txt output.txt -m 100
+
+    Expand URLs only for domains listed in domains.csv:
+        python expand_urls.py input.txt output.txt -d domains.csv
+
+    Disable caching and enable debug logging:
+        python expand_urls.py input.txt output.txt --no-cache --debug
+"""
 
 import aiohttp
 import argparse
@@ -7,13 +64,15 @@ import time
 import logging
 from urllib.parse import urlsplit
 import re
+from typing import Optional, List, Awaitable
 
-TTL_DNS_CACHE=300  # Time-to-live of DNS cache
-MAX_TCP_CONN=50  # Throttle at max these many simultaneous connections
-TIMEOUT_TOTAL=10  # Each request times out after these many seconds
+
+TTL_DNS_CACHE = 300  # Time-to-live of DNS cache
+MAX_TCP_CONN = 50  # Throttle at max these many simultaneous connections
+TIMEOUT_TOTAL = 10  # Each request times out after these many seconds
 
 LOG_FMT = "%(asctime)s:%(levelname)s:%(message)s"
-logging.basicConfig(format=LOG_FMT, level="INFO") 
+logging.basicConfig(format=LOG_FMT, level="INFO")
 _STATS = {
     "ignored": 0,
     "timeout": 0,
@@ -24,37 +83,58 @@ _STATS = {
 }
 
 
-def make_parser():
+def make_parser() -> argparse.ArgumentParser:
+    """
+    Creates an ArgumentParser object with the script's command-line options.
+
+    Returns:
+        An argparse.ArgumentParser object configured with the script's options.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input")
     parser.add_argument("output")
-    parser.add_argument("-m", 
-                        "--maxlen", 
-                        type=int, 
+    parser.add_argument("-m",
+                        "--maxlen",
+                        type=int,
                         metavar="LEN",
                         help="Ignore domains longer than %(metavar)s")
-    parser.add_argument("-d", 
-                        "--domains", 
+    parser.add_argument("-d",
+                        "--domains",
                         dest="domains_path",
                         metavar="PATH",
                         help="Expand if domain is present in CSV file at %(metavar)s")
-    parser.add_argument("--domains-noheader", 
+    parser.add_argument("--domains-noheader",
                         action="store_false",
                         dest="skip_header",
                         help="CSV file with domains has no header")
-    parser.add_argument("--no-cache", 
-                        action="store_true", 
+    parser.add_argument("--no-cache",
+                        action="store_true",
                         help="disable cache")
-    parser.add_argument("--debug", 
-                        action="store_const", 
+    parser.add_argument("--debug",
+                        action="store_const",
                         const="DEBUG",
                         dest="log_level")
     parser.set_defaults(log_level="INFO")
     return parser
 
 
-async def unshortenone(url, session, pattern=None, maxlen=None, 
-                       cache=None, timeout=None):
+async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Optional[re.Pattern] = None,
+                       maxlen: Optional[int] = None, cache: Optional[dict] = None,
+                       timeout: Optional[aiohttp.ClientTimeout] = None) -> str:
+    """
+    Expands a single short URL using an aiohttp session.
+
+    Args:
+        url: The short URL to expand.
+        session: An aiohttp.ClientSession object for making HTTP requests.
+        pattern: A compiled regular expression to match against the URL's domain.
+        maxlen: The maximum length of the URL to expand.
+        cache: A dictionary for caching expanded URLs.
+        timeout: An aiohttp.ClientTimeout object specifying the request timeout.
+
+    Returns:
+        The expanded URL if successful, or the original URL if an error occurs or the URL is filtered out.
+    """
     # If user specified list of domains, check netloc is in it, otherwise set
     # to False (equivalent of saying there is always a match against the empty list)
     if pattern is not None:
@@ -76,7 +156,7 @@ async def unshortenone(url, session, pattern=None, maxlen=None,
     else:
         try:
             # await asyncio.sleep(0.01)
-            resp = await session.head(url, timeout=timeout, 
+            resp = await session.head(url, timeout=timeout,
                                       ssl=False, allow_redirects=True)
             expanded_url = str(resp.url)
             if url != expanded_url:
@@ -95,15 +175,40 @@ async def unshortenone(url, session, pattern=None, maxlen=None,
 
 
 # Thanks: https://blog.jonlu.ca/posts/async-python-http
-async def gather_with_concurrency(n, *tasks):
+async def gather_with_concurrency(n: int, *tasks: Awaitable) -> List:
+    """
+    Runs tasks concurrently with a maximum of n simultaneous tasks.
+
+    Args:
+        n: The maximum number of tasks to run concurrently.
+        *tasks: The tasks to run.
+
+    Returns:
+        A list of the results of the completed tasks.
+    """
     semaphore = asyncio.Semaphore(n)
+
     async def sem_task(task):
         async with semaphore:
             return await task
     return await asyncio.gather(*(sem_task(task) for task in tasks))
 
 
-async def _unshorten(*urls, cache=None, domains=None, maxlen=None):
+# async def _unshorten(*urls, cache=None, domains=None, maxlen=None):
+async def _unshorten(*urls: str, cache: Optional[dict] = None, domains: Optional[List[str]] = None,
+                     maxlen: Optional[int] = None) -> List[str]:
+    """
+    Expands multiple URLs concurrently using the specified options.
+
+    Args:
+        *urls: The URLs to expand.
+        cache: A dictionary for caching expanded URLs.
+        domains: A list of domains to filter URLs by.
+        maxlen: The maximum length of the URLs to expand.
+
+    Returns:
+        A list of the expanded URLs.
+    """
     if domains is not None:
         pattern = re.compile(f"({'|'.join(domains)})", re.I)
     else:
@@ -112,19 +217,38 @@ async def _unshorten(*urls, cache=None, domains=None, maxlen=None):
     u1 = unshortenone
     timeout = aiohttp.ClientTimeout(total=TIMEOUT_TOTAL)
     async with aiohttp.ClientSession(connector=conn) as session:
-        return await gather_with_concurrency(MAX_TCP_CONN, 
+        return await gather_with_concurrency(MAX_TCP_CONN,
                                              *(u1(u, session, cache=cache,
                                                   maxlen=maxlen,
-                                                  pattern=pattern, 
+                                                  pattern=pattern,
                                                   timeout=timeout) for u in urls))
 
 
-def unshorten(*args, **kwargs):
+# def unshorten(*args, **kwargs):
+def unshorten(*args, **kwargs) -> List[str]:
+    """
+    Calls _unshorten() using the provided arguments and keyword arguments.
+
+    Args:
+        *args: Positional arguments to pass to _unshorten().
+        **kwargs: Keyword arguments to pass to _unshorten().
+
+    Returns:
+        A list of the expanded URLs.
+    """
+
     loop = asyncio.get_event_loop()
     return loop.run_until_complete(_unshorten(*args, **kwargs))
 
 
-def _main(args):
+def _main(args: argparse.Namespace) -> None:
+    """
+    Main function that reads input, processes URLs, and writes output.
+
+    Args:
+        args: An argparse.Namespace object containing the script's command-line arguments.
+    """
+
     try:
         logging.basicConfig(level=args.log_level, format=LOG_FMT, force=True)
         logging.info(args)
@@ -142,14 +266,15 @@ def _main(args):
         tic = time.time()
         with open(args.input, encoding="utf8") as inputf:
             shorturls = (url.strip(" \n") for url in inputf)
-            urls = unshorten(*shorturls, cache=cache, domains=domains, 
+            urls = unshorten(*shorturls, cache=cache, domains=domains,
                              maxlen=args.maxlen)
         with open(args.output, "w", encoding="utf8") as outf:
             outf.writelines((u + "\n" for u in urls))
         toc = time.time()
         elapsed = toc - tic
         rate = len(urls) / elapsed
-        logging.info(f"Processed {len(urls)} urls in {elapsed:.2f}s ({rate:.2f} urls/s))")
+        logging.info(f"Processed {len(urls)} urls in {
+                     elapsed:.2f}s ({rate:.2f} urls/s))")
     except KeyboardInterrupt:
         import sys
         print(file=sys.stderr)
@@ -157,11 +282,16 @@ def _main(args):
     finally:
         logging.info(f"Ignored: {_STATS['ignored']:.0f}")
         logging.info(f"Expanded: {_STATS['expanded']:.0f}")
-        logging.info(f"Cached: {_STATS['cached']:.0f} ({_STATS['cached_retrieved']:.0f} hits)")
-        logging.info(f"Errors: {_STATS['error']:.0f} ({_STATS['timeout']:.0f} timed out)")
+        logging.info(f"Cached: {_STATS['cached']:.0f} ({
+                     _STATS['cached_retrieved']:.0f} hits)")
+        logging.info(f"Errors: {_STATS['error']:.0f} ({
+                     _STATS['timeout']:.0f} timed out)")
 
 
-def main():
+def main() -> None:
+    """
+    Entry point of the script, parses command-line arguments and calls _main().
+    """
     parser = make_parser()
     args = parser.parse_args()
     _main(args)
