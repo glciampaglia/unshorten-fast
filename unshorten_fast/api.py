@@ -65,10 +65,11 @@ import logging
 from urllib.parse import urlsplit
 import re
 from typing import Optional, List, Awaitable
+import redis
 
 
 TTL_DNS_CACHE = 300  # Time-to-live of DNS cache
-MAX_TCP_CONN = 50  # Throttle at max these many simultaneous connections
+MAX_TCP_CONN = 400  # Throttle at max these many simultaneous connections
 TIMEOUT_TOTAL = 10  # Each request times out after these many seconds
 
 LOG_FMT = "%(asctime)s:%(levelname)s:%(message)s"
@@ -119,7 +120,7 @@ def make_parser() -> argparse.ArgumentParser:
 
 
 async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Optional[re.Pattern] = None,
-                       maxlen: Optional[int] = None, cache: Optional[dict] = None,
+                       maxlen: Optional[int] = None, cache: Optional[redis.Redis] = None,
                        timeout: Optional[aiohttp.ClientTimeout] = None) -> str:
     """
     Expands a single short URL using an aiohttp session.
@@ -150,9 +151,14 @@ async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Option
     if too_long or no_match:
         _STATS["ignored"] += 1
         return url
-    if cache is not None and url in cache:
+    # if cache is not None and url in cache:
+    #     _STATS["cached_retrieved"] += 1
+    #     return str(cache[url])
+    cached_ans = cache.get(url) if cache is not None else None
+
+    if cached_ans is not None:
         _STATS["cached_retrieved"] += 1
-        return str(cache[url])
+        return cached_ans.decode('UTF-8')
     else:
         try:
             # await asyncio.sleep(0.01)
@@ -161,10 +167,12 @@ async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Option
             expanded_url = str(resp.url)
             if url != expanded_url:
                 _STATS['expanded'] += 1
-                if cache is not None and url not in cache:
+                # if cache is not None and url not in cache:
+                if cache is not None and cache.get(url) is None:
                     # update cache if needed
                     _STATS["cached"] += 1
-                    cache[url] = expanded_url
+                    # cache[url] = expanded_url
+                    cache.set(url, expanded_url)
             return expanded_url
         except (aiohttp.ClientError, asyncio.TimeoutError, UnicodeError) as e:
             _STATS["error"] += 1
@@ -194,7 +202,6 @@ async def gather_with_concurrency(n: int, *tasks: Awaitable) -> List:
     return await asyncio.gather(*(sem_task(task) for task in tasks))
 
 
-# async def _unshorten(*urls, cache=None, domains=None, maxlen=None):
 async def _unshorten(*urls: str, cache: Optional[dict] = None, domains: Optional[List[str]] = None,
                      maxlen: Optional[int] = None) -> List[str]:
     """
@@ -262,7 +269,8 @@ def _main(args: argparse.Namespace) -> None:
         if args.no_cache:
             cache = None
         else:
-            cache = {}
+            # cache = {}
+            cache = redis.Redis()
         tic = time.time()
         with open(args.input, encoding="utf8") as inputf:
             shorturls = (url.strip(" \n") for url in inputf)
@@ -273,8 +281,7 @@ def _main(args: argparse.Namespace) -> None:
         toc = time.time()
         elapsed = toc - tic
         rate = len(urls) / elapsed
-        logging.info(f"Processed {len(urls)} urls in {
-                     elapsed:.2f}s ({rate:.2f} urls/s))")
+        logging.info(f"Processed {len(urls)} urls in {elapsed:.2f}s ({rate:.2f} urls/s))")
     except KeyboardInterrupt:
         import sys
         print(file=sys.stderr)
@@ -282,10 +289,8 @@ def _main(args: argparse.Namespace) -> None:
     finally:
         logging.info(f"Ignored: {_STATS['ignored']:.0f}")
         logging.info(f"Expanded: {_STATS['expanded']:.0f}")
-        logging.info(f"Cached: {_STATS['cached']:.0f} ({
-                     _STATS['cached_retrieved']:.0f} hits)")
-        logging.info(f"Errors: {_STATS['error']:.0f} ({
-                     _STATS['timeout']:.0f} timed out)")
+        logging.info(f"Cached: {_STATS['cached']:.0f} ({_STATS['cached_retrieved']:.0f} hits)")
+        logging.info(f"Errors: {_STATS['error']:.0f} ({_STATS['timeout']:.0f} timed out)")
 
 
 def main() -> None:
