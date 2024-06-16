@@ -61,6 +61,7 @@ import aiohttp
 import argparse
 import asyncio
 import time
+from statistics import mean, median, stdev
 import logging
 from urllib.parse import urlsplit
 import re
@@ -68,9 +69,11 @@ from typing import Optional, List, Awaitable
 import redis
 
 
-TTL_DNS_CACHE = 300  # Time-to-live of DNS cache
-MAX_TCP_CONN = 400  # Throttle at max these many simultaneous connections
-TIMEOUT_TOTAL = 10  # Each request times out after these many seconds
+
+TTL_DNS_CACHE=300  # Time-to-live of DNS cache
+MAX_TCP_CONN=200  # Throttle at max these many simultaneous connections
+TIMEOUT_TOTAL=10  # Each request times out after these many seconds
+
 
 LOG_FMT = "%(asctime)s:%(levelname)s:%(message)s"
 logging.basicConfig(format=LOG_FMT, level="INFO")
@@ -80,7 +83,9 @@ _STATS = {
     "error": 0,
     "cached": 0,
     "cached_retrieved": 0,
-    "expanded": 0
+    "expanded": 0,
+    "elapsed_a": [],
+    "elapsed_e": [],
 }
 
 
@@ -162,11 +167,16 @@ async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Option
     else:
         try:
             # await asyncio.sleep(0.01)
+            req_start = time.time()
             resp = await session.head(url, timeout=timeout,
                                       ssl=False, allow_redirects=True)
+            req_stop = time.time()
+            elapsed = req_stop - req_start
             expanded_url = str(resp.url)
+            _STATS['elapsed_a'].append(elapsed)
             if url != expanded_url:
                 _STATS['expanded'] += 1
+                _STATS['elapsed_e'].append(elapsed)
                 # if cache is not None and url not in cache:
                 if cache is not None and cache.get(url) is None:
                     # update cache if needed
@@ -175,6 +185,9 @@ async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Option
                     cache.set(url, expanded_url)
             return expanded_url
         except (aiohttp.ClientError, asyncio.TimeoutError, UnicodeError) as e:
+            req_stop = time.time()
+            elapsed = req_stop - req_start
+            _STATS['elapsed_a'].append(elapsed)
             _STATS["error"] += 1
             if isinstance(e, asyncio.TimeoutError):
                 _STATS["timeout"] += 1
@@ -230,7 +243,6 @@ async def _unshorten(*urls: str, cache: Optional[dict] = None, domains: Optional
                                                   pattern=pattern,
                                                   timeout=timeout) for u in urls))
 
-
 # def unshorten(*args, **kwargs):
 def unshorten(*args, **kwargs) -> List[str]:
     """
@@ -244,8 +256,16 @@ def unshorten(*args, **kwargs) -> List[str]:
         A list of the expanded URLs.
     """
 
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(_unshorten(*args, **kwargs))
+    return asyncio.run(_unshorten(*args, **kwargs))
+
+
+def _log_elapsed_ms(seq, what):
+    if seq:
+        elap_av = mean(seq) / 1e3
+        elap_sd = stdev(seq) / 1e3
+        logging.info(f"{what}: {elap_av:.5f}±{elap_sd:.5f} ms")
+    else:
+        logging.info(f"{what}: N/A")
 
 
 def _main(args: argparse.Namespace) -> None:
@@ -287,6 +307,8 @@ def _main(args: argparse.Namespace) -> None:
         print(file=sys.stderr)
         logging.info("Interrupted by user.")
     finally:
+        _log_elapsed_ms(_STATS['elapsed_a'], "Elapsed (all)")
+        _log_elapsed_ms(_STATS['elapsed_e'], "Elapsed (expanded)")
         logging.info(f"Ignored: {_STATS['ignored']:.0f}")
         logging.info(f"Expanded: {_STATS['expanded']:.0f}")
         logging.info(f"Cached: {_STATS['cached']:.0f} ({_STATS['cached_retrieved']:.0f} hits)")
