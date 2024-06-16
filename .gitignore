@@ -1,0 +1,5 @@
+.python-version
+.venv/
+build/
+unshorten_fast.egg-info/
+unshorten_fast/__pycache__/
