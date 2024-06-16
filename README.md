@@ -12,3 +12,11 @@ concurrently.
 - Flexible inclusion criteria:
   + User-defined domain inclusion list;
   - URL length;
+
+## Installation
+
+TODO
+
+## Usage
+
+> unshorten 
