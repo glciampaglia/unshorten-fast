@@ -62,11 +62,15 @@ def make_parser() -> argparse.ArgumentParser:
                         const="DEBUG",
                         dest="log_level")
     parser.set_defaults(log_level="INFO")
+
+    parser.add_argument("--cache-redis",
+                        action="store_true",
+                        help="use redis cache")
     return parser
 
 
 async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Optional[re.Pattern] = None,
-                       maxlen: Optional[int] = None, cache: Optional[redis.Redis] = None,
+                       maxlen: Optional[int] = None, cache: Optional[redis.Redis, dict] = None,
                        timeout: Optional[aiohttp.ClientTimeout] = None) -> str:
     """
     Expands a single short URL using an aiohttp session.
@@ -97,12 +101,12 @@ async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Option
     if too_long or no_match:
         _STATS["ignored"] += 1
         return url
-    # if cache is not None and url in cache:
-    #     _STATS["cached_retrieved"] += 1
-    #     return str(cache[url])
     cached_ans = cache.get(url) if cache is not None else None
-
-    if cached_ans is not None:
+    if isinstance(cache, dict):
+        if cache is not None and url in cache:
+            _STATS["cached_retrieved"] += 1
+            return str(cached_ans)
+    elif cached_ans is not None:
         _STATS["cached_retrieved"] += 1
         return cached_ans.decode('UTF-8')
     else:
@@ -118,12 +122,16 @@ async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Option
             if url != expanded_url:
                 _STATS['expanded'] += 1
                 _STATS['elapsed_e'].append(elapsed)
-                # if cache is not None and url not in cache:
-                if cache is not None and cache.get(url) is None:
-                    # update cache if needed
-                    _STATS["cached"] += 1
-                    # cache[url] = expanded_url
-                    cache.set(url, expanded_url)
+                if isinstance(cache, dict):
+                    if cache is not None and url not in cache:
+                        # update cache if needed
+                        _STATS["cached"] += 1
+                        cache[url] = expanded_url
+                else:
+                    if cache is not None and cache.get(url) is None:
+                        # update cache if needed
+                        _STATS["cached"] += 1
+                        cache.set(url, expanded_url)
             return expanded_url
         except (aiohttp.ClientError, asyncio.TimeoutError, UnicodeError) as e:
             req_stop = time.time()
@@ -232,8 +240,10 @@ def _main(args: argparse.Namespace) -> None:
         if args.no_cache:
             cache = None
         else:
-            # cache = {}
-            cache = redis.Redis()
+            if args.cache_redis:
+                cache = redis.Redis()
+            else:
+                cache = {}
         tic = time.time()
         with open(args.input, encoding="utf8") as inputf:
             shorturls = (url.strip(" \n") for url in inputf)
