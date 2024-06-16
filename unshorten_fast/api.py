@@ -120,8 +120,7 @@ async def _unshorten(*urls, cache=None, domains=None, maxlen=None):
 
 
 def unshorten(*args, **kwargs):
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(_unshorten(*args, **kwargs))
+    return asyncio.run(_unshorten(*args, **kwargs))
 
 
 def _main(args):
