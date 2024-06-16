@@ -4,6 +4,7 @@ import aiohttp
 import argparse
 import asyncio
 import time
+from statistics import mean, median, stdev
 import logging
 from urllib.parse import urlsplit
 import re
@@ -20,7 +21,9 @@ _STATS = {
     "error": 0,
     "cached": 0,
     "cached_retrieved": 0,
-    "expanded": 0
+    "expanded": 0,
+    "elapsed_a": [],
+    "elapsed_e": [],
 }
 
 
@@ -76,17 +79,25 @@ async def unshortenone(url, session, pattern=None, maxlen=None,
     else:
         try:
             # await asyncio.sleep(0.01)
+            req_start = time.time()
             resp = await session.head(url, timeout=timeout, 
                                       ssl=False, allow_redirects=True)
+            req_stop = time.time()
+            elapsed = req_stop - req_start
             expanded_url = str(resp.url)
+            _STATS['elapsed_a'].append(elapsed)
             if url != expanded_url:
                 _STATS['expanded'] += 1
+                _STATS['elapsed_e'].append(elapsed)
                 if cache is not None and url not in cache:
                     # update cache if needed
                     _STATS["cached"] += 1
                     cache[url] = expanded_url
             return expanded_url
         except (aiohttp.ClientError, asyncio.TimeoutError, UnicodeError) as e:
+            req_stop = time.time()
+            elapsed = req_stop - req_start
+            _STATS['elapsed_a'].append(elapsed)
             _STATS["error"] += 1
             if isinstance(e, asyncio.TimeoutError):
                 _STATS["timeout"] += 1
@@ -123,6 +134,15 @@ def unshorten(*args, **kwargs):
     return asyncio.run(_unshorten(*args, **kwargs))
 
 
+def _log_elapsed_ms(seq, what):
+    if seq:
+        elap_av = mean(seq) / 1e3
+        elap_sd = stdev(seq) / 1e3
+        logging.info(f"{what}: {elap_av:.5f}±{elap_sd:.5f} ms")
+    else:
+        logging.info(f"{what}: N/A")
+
+
 def _main(args):
     try:
         logging.basicConfig(level=args.log_level, format=LOG_FMT, force=True)
@@ -154,6 +174,8 @@ def _main(args):
         print(file=sys.stderr)
         logging.info("Interrupted by user.")
     finally:
+        _log_elapsed_ms(_STATS['elapsed_a'], "Elapsed (all)")
+        _log_elapsed_ms(_STATS['elapsed_e'], "Elapsed (expanded)")
         logging.info(f"Ignored: {_STATS['ignored']:.0f}")
         logging.info(f"Expanded: {_STATS['expanded']:.0f}")
         logging.info(f"Cached: {_STATS['cached']:.0f} ({_STATS['cached_retrieved']:.0f} hits)")
