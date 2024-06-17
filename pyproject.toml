@@ -17,6 +17,12 @@ dynamic = ["dependencies"]
 [project.scripts]
 unshorten = "unshorten_fast.api:main"
 
-# [project.urls]
-# "Homepage" = "https://github.com/CSDL-USF/infodiversity-experiment"
-# "Bug Tracker" = "https://github.com/CSDL-USF/infodiversity-experiment/issues"
+[project.urls]
+"Homepage" = "https://github.com/glciampaglia/unshorten-fast"
+"Bug Tracker" = "https://github.com/glciampaglia/unshorten-fast/issues"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
