@@ -7,7 +7,7 @@ from statistics import mean, median, stdev
 import logging
 from urllib.parse import urlsplit
 import re
-from typing import Optional, List, Awaitable
+from typing import Optional, List, Awaitable, Union 
 import redis
 
 
@@ -70,7 +70,7 @@ def make_parser() -> argparse.ArgumentParser:
 
 
 async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Optional[re.Pattern] = None,
-                       maxlen: Optional[int] = None, cache: Optional[redis.Redis, dict] = None,
+                       maxlen: Optional[int] = None, cache: Union[redis.Redis, dict, None] = None,
                        timeout: Optional[aiohttp.ClientTimeout] = None) -> str:
     """
     Expands a single short URL using an aiohttp session.
@@ -102,8 +102,7 @@ async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Option
         _STATS["ignored"] += 1
         return url
     cached_ans = cache.get(url) if cache is not None else None
-    if isinstance(cache, dict):
-        if cache is not None and url in cache:
+    if isinstance(cache, dict) and url in cache:
             _STATS["cached_retrieved"] += 1
             return str(cached_ans)
     elif cached_ans is not None:
@@ -122,8 +121,8 @@ async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Option
             if url != expanded_url:
                 _STATS['expanded'] += 1
                 _STATS['elapsed_e'].append(elapsed)
-                if isinstance(cache, dict):
-                    if cache is not None and url not in cache:
+                if isinstance(cache, dict) and url not in cache:
+                    # if cache is not None and url not in cache:
                         # update cache if needed
                         _STATS["cached"] += 1
                         cache[url] = expanded_url
@@ -254,8 +253,7 @@ def _main(args: argparse.Namespace) -> None:
         toc = time.time()
         elapsed = toc - tic
         rate = len(urls) / elapsed
-        logging.info(f"Processed {len(urls)} urls in {
-                     elapsed:.2f}s ({rate:.2f} urls/s))")
+        logging.info(f"Processed {len(urls)} urls in {elapsed:.2f}s ({rate:.2f} urls/s))")
     except KeyboardInterrupt:
         import sys
         print(file=sys.stderr)
@@ -265,10 +263,8 @@ def _main(args: argparse.Namespace) -> None:
         _log_elapsed_ms(_STATS['elapsed_e'], "Elapsed (expanded)")
         logging.info(f"Ignored: {_STATS['ignored']:.0f}")
         logging.info(f"Expanded: {_STATS['expanded']:.0f}")
-        logging.info(f"Cached: {_STATS['cached']:.0f} ({
-                     _STATS['cached_retrieved']:.0f} hits)")
-        logging.info(f"Errors: {_STATS['error']:.0f} ({
-                     _STATS['timeout']:.0f} timed out)")
+        logging.info(f"Cached: {_STATS['cached']:.0f} ({_STATS['cached_retrieved']:.0f} hits)")
+        logging.info(f"Errors: {_STATS['error']:.0f} ({_STATS['timeout']:.0f} timed out)")
 
 
 def main() -> None:
