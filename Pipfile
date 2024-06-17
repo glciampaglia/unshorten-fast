@@ -8,6 +8,7 @@ aiohttp = "*"
 aiodns = "*"
 cchardet = "*"
 brotli = "*"
+redis = "*"
 
 [dev-packages]
 ipython = "*"
