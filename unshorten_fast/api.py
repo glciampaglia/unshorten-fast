@@ -65,6 +65,20 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cache-redis",
                         action="store_true",
                         help="use redis cache")
+    parser.add_argument("--cache-redis-host",
+                        metavar="HOST",
+                        default='localhost',
+                        help="Connect to this host for Redis (default: %(default)s)")
+    parser.add_argument("--cache-redis-port",
+                        metavar="PORT",
+                        type=int,
+                        default=6379,
+                        help="Connect to this port for Redis (default: %(default)d)")
+    parser.add_argument("--cache-redis-db",
+                        metavar="DB",
+                        type=int,
+                        default=0,
+                        help="Connect to this db for Redis (default: %(default)d)")
     return parser
 
 
@@ -231,7 +245,9 @@ def _main(args: argparse.Namespace) -> None:
             cache = None
         else:
             if args.cache_redis:
-                cache = redis.Redis()
+                cache = redis.Redis(host=args.cache_redis_host,
+                                    port=args.cache_redis_port,
+                                    db=args.cache_redis_db)
             else:
                 cache = {}
         tic = time.time()
