@@ -11,16 +11,17 @@ This Python script expands short URLs from URL shortening services to their orig
 
 ### Installation
 
-1. Clone the repository or download the script file.
+1. Clone the repository
 2. Install the required dependencies:
 
 ```shell
-pip install aiohttp redis
+pip install e .
 ```
 
+### Running
 
 ```shell
-python expand_urls.py <input_file> <output_file> [options]
+unshorten <input_file> <output_file> [options]
 ```
 ### Arguments
 
@@ -45,26 +46,26 @@ The script has the following configurable parameters:
 
 ### Examples
 Expand URLs from `input.txt` and write the expanded URLs to `output.txt`:
-```python
-python expand_urls.py input.txt output.txt
+```shell
+unshorten input.txt output.txt
 ```
 Expand URLs with a maximum length of 100 characters:
-```python
-python expand_urls.py input.txt output.txt -m 100
+```shell
+unshorten input.txt output.txt -m 100
 ```
 Expand URLs only for domains listed in domains.csv:
-```python
-python expand_urls.py input.txt output.txt -d domains.csv
+```shell
+unshorten input.txt output.txt -d domains.csv
 ```
 Disable caching and enable debug logging:
-```python
-python expand_urls.py input.txt output.txt --no-cache --debug
+```shell
+unshorten input.txt output.txt --no-cache --debug
 ```
 
 Use Redis cache instead of an in-memory dictionary:
 
 ```
-python expand_urls.py input.txt output.txt --cache-redis
+unshorten input.txt output.txt --cache-redis
 ```
 Logging and Statistics
 The script uses the `logging` module to log information and errors. The log format is defined by `LOG_FMT`, and the log level can be set using the `--debug` option.
@@ -80,5 +81,3 @@ The script tracks various statistics in the `_STATS` dictionary:
 - `elapsed_e`: List of elapsed times for expanded URLs.
 
 The statistics are logged at the end of the script's execution.
-### License
-This script is released under the MIT License.
