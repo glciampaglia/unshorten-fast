@@ -4,7 +4,7 @@ import aiohttp
 import argparse
 import asyncio
 import time
-from statistics import mean, median, stdev
+from statistics import mean, stdev
 import logging
 from urllib.parse import urlsplit
 import re
