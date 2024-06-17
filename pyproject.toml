@@ -11,7 +11,8 @@ authors = [
 description = "Expands URLs from shortening services fast"
 readme = "README.md"
 requires-python = ">= 3.7"
-# specified in setuptools script
+
+# Let build backend figure out dependencies
 dynamic = ["dependencies"]
 
 [project.scripts]
