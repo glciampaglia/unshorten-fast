@@ -16,6 +16,7 @@ This Python script expands short URLs from URL shortening services to their orig
 
 ```shell
 pip install -r requirements.txt
+pip install e .
 ```
 
 ### Running
