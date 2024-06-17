@@ -82,8 +82,10 @@ def make_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Optional[re.Pattern] = None,
-                       maxlen: Optional[int] = None, cache: Union[redis.Redis, dict, None] = None,
+async def unshortenone(url: str, session: aiohttp.ClientSession,
+                       pattern: Optional[re.Pattern] = None,
+                       maxlen: Optional[int] = None,
+                       cache: Union[redis.Redis, dict, None] = None,
                        timeout: Optional[aiohttp.ClientTimeout] = None) -> str:
     """
     Expands a single short URL using an aiohttp session.
@@ -97,7 +99,8 @@ async def unshortenone(url: str, session: aiohttp.ClientSession, pattern: Option
         timeout: An aiohttp.ClientTimeout object specifying the request timeout.
 
     Returns:
-        The expanded URL if successful, or the original URL if an error occurs or the URL is filtered out.
+        The expanded URL if successful, or the original URL if an error occurs
+        or the URL is filtered out.
     """
     # If user specified list of domains, check netloc is in it, otherwise set
     # to False (equivalent of saying there is always a match against the empty list)
@@ -168,7 +171,9 @@ async def gather_with_concurrency(n: int, *tasks: Awaitable) -> List:
     return await asyncio.gather(*(sem_task(task) for task in tasks))
 
 
-async def _unshorten(*urls: str, cache: Optional[dict] = None, domains: Optional[List[str]] = None,
+async def _unshorten(*urls: str,
+                     cache: Optional[dict] = None,
+                     domains: Optional[List[str]] = None,
                      maxlen: Optional[int] = None) -> List[str]:
     """
     Expands multiple URLs concurrently using the specified options.
@@ -196,9 +201,6 @@ async def _unshorten(*urls: str, cache: Optional[dict] = None, domains: Optional
                                                   pattern=pattern,
                                                   timeout=timeout) for u in urls))
 
-# def unshorten(*args, **kwargs):
-
-
 def unshorten(*args, **kwargs) -> List[str]:
     """
     Calls _unshorten() using the provided arguments and keyword arguments.
@@ -210,7 +212,6 @@ def unshorten(*args, **kwargs) -> List[str]:
     Returns:
         A list of the expanded URLs.
     """
-
     return asyncio.run(_unshorten(*args, **kwargs))
 
 
@@ -228,9 +229,9 @@ def _main(args: argparse.Namespace) -> None:
     Main function that reads input, processes URLs, and writes output.
 
     Args:
-        args: An argparse.Namespace object containing the script's command-line arguments.
+        args: An argparse.Namespace object containing the script's command-line
+        arguments.
     """
-
     try:
         logging.basicConfig(level=args.log_level, format=LOG_FMT, force=True)
         logging.info(args)
