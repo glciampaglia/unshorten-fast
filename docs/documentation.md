@@ -15,7 +15,7 @@ This Python script expands short URLs from URL shortening services to their orig
 2. Install the required dependencies:
 
 ```shell
-pip install e .
+pip install -r requirements.txt
 ```
 
 ### Running
