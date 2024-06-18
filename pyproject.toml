@@ -11,9 +11,9 @@ authors = [
 description = "Expands URLs from shortening services fast"
 readme = "README.md"
 requires-python = ">= 3.7"
-
-# Let build backend figure out dependencies
-dynamic = ["dependencies"]
+dependencies = [
+    "aiohttp[speedups]",
+]
 
 [project.scripts]
 unshorten = "unshorten_fast.api:main"
@@ -24,6 +24,3 @@ unshorten = "unshorten_fast.api:main"
 
 [tool.setuptools]
 include-package-data = true
-
-[tool.setuptools.packages.find]
-where = ["."]
