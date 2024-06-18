@@ -158,3 +158,6 @@ cython_debug/
 build/
 unshorten_fast.egg-info/
 unshorten_fast/__pycache__/
+
+# VIM
+.*.swp
