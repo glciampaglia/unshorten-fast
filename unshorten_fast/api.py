@@ -1,23 +1,24 @@
 """ Expand URLs from shortening services """
-import aiohttp
-import argparse
-import asyncio
-import time
-from statistics import mean, stdev
-import logging
-from urllib.parse import urlsplit
 import re
-from typing import Optional, List, Awaitable, Union 
-import redis
+import time
+import asyncio
+import logging
+import argparse
 
+from statistics import mean, stdev
+from urllib.parse import urlsplit
+from typing import Optional, List, Awaitable, Union 
+
+import aiohttp
+import redis
 
 TTL_DNS_CACHE = 300  # Time-to-live of DNS cache
 MAX_TCP_CONN = 200  # Throttle at max these many simultaneous connections
 TIMEOUT_TOTAL = 10  # Each request times out after these many seconds
 
-
 LOG_FMT = "%(asctime)s:%(levelname)s:%(message)s"
 logging.basicConfig(format=LOG_FMT, level="INFO")
+
 _STATS = {
     "ignored": 0,
     "timeout": 0,
@@ -82,7 +83,8 @@ def make_parser() -> argparse.ArgumentParser:
     return parser
 
 
-async def unshortenone(url: str, session: aiohttp.ClientSession,
+async def unshortenone(url: str, 
+                       session: aiohttp.ClientSession,
                        pattern: Optional[re.Pattern] = None,
                        maxlen: Optional[int] = None,
                        cache: Union[redis.Redis, dict, None] = None,
@@ -164,7 +166,6 @@ async def gather_with_concurrency(n: int, *tasks: Awaitable) -> List:
         A list of the results of the completed tasks.
     """
     semaphore = asyncio.Semaphore(n)
-
     async def sem_task(task):
         async with semaphore:
             return await task
@@ -172,23 +173,16 @@ async def gather_with_concurrency(n: int, *tasks: Awaitable) -> List:
 
 
 async def _unshorten(*urls: str,
-                     cache: Optional[dict] = None,
+                     cache: Union[redis.Redis, dict, None] = None,
                      domains: Optional[List[str]] = None,
                      maxlen: Optional[int] = None) -> List[str]:
     """
-    Expands multiple URLs concurrently using the specified options.
-
-    Args:
-        *urls: The URLs to expand.
-        cache: A dictionary for caching expanded URLs.
-        domains: A list of domains to filter URLs by.
-        maxlen: The maximum length of the URLs to expand.
-
-    Returns:
-        A list of the expanded URLs.
+    See unshorten()
     """
     if domains is not None:
-        pattern = re.compile(f"({'|'.join(domains)})", re.I)
+        # match only the tail end of netloc
+        doms = (d + '$' for d in domains)
+        pattern = re.compile(f"({'|'.join(doms)})", re.I)
     else:
         pattern = None
     conn = aiohttp.TCPConnector(ttl_dns_cache=TTL_DNS_CACHE, limit=None)
@@ -203,11 +197,13 @@ async def _unshorten(*urls: str,
 
 def unshorten(*args, **kwargs) -> List[str]:
     """
-    Calls _unshorten() using the provided arguments and keyword arguments.
+    Expands multiple URLs concurrently using the specified options.
 
     Args:
-        *args: Positional arguments to pass to _unshorten().
-        **kwargs: Keyword arguments to pass to _unshorten().
+        *urls: The URLs to expand.
+        cache: A Python dictionary / redis.Redis instance for caching expanded URLs.
+        domains: A list of domains to filter URLs by.
+        maxlen: The maximum length of the URLs to expand.
 
     Returns:
         A list of the expanded URLs.
