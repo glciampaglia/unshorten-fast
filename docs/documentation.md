@@ -18,11 +18,69 @@ of requests.
 
 ## Installation
 
-1. Clone the repository
-2. Install the package along with its required dependencies:
+Depending on how you want to use the tool, there are different recommended
+installation methods. If you want to primarily use it as a standalone script
+from the command line, then the recommended method is via
+[pipx](https://github.com/pypa/pipx). Otherwise, if you plan to use it in your
+own code, you can use pip or any another dependency management tool. For both
+of these methods, point your package installer tool to the
+`glciampaglia/unshorten-fast` repository on Github. Finally, if you plan to
+modify the tool (for example with an editable install) and want to work in the
+exact same development environment, the recommended tool is
+[pipenv](https://pipenv.pypa.io/en/latest/), though we also provide a
+`requirements.txt` file pinned to the same environment.
+
+### Recommended (as a standalone script): using pipx
+
+If you just care about using `unshorten` from the command line, then the best
+is to install it in its own separate virtual environment.  
+
+1. Install pipx using [these instructions](https://pipx.pypa.io/stable/installation/)
+2. Run the following to install **unshorten-fast**:
 
 ```shell
-pip install .
+pipx install git+https://github.com/glciampaglia/unshorten-fast.git
+```
+
+### Recommended (as a dependency): using pip
+
+If you are looking to import `unshorten_fast` in your code, you will need to install it in your environment. At the moment the package has not been published on PyPI yet, so the simplest way is to point `pip` directly to a Github repository, for example the main one (`glciampaglia/unshorten-fast`).
+
+```shell
+pip install git+https://github.com/glciampaglia/unshorten-fast.git
+```
+
+If you want to install a forked version, then you will need to change
+`glciampaglia/` to your forked version.
+
+### Additional method (as a development environment): using pipenv
+
+If you plan to make changes to **unshorten-fast**, you will probably want to checkout the code from Github and create an editable install that allows you to modify the code but still make use of the command line tool as an entry point. To reproduce the same environment used to develop **unshorten-fast**, the recommended way is to use [Pipenv](https://pipenv/pypa.io), a dependency management tool. This will checkout **unshorten-fast**'s code and create 
+
+```shell
+git clone https://github.com/glciampaglia/unshorten-fast.git
+cd unshorten-fast
+pipenv sync
+pipenv shell
+pip install -e .
+```
+
+Note that if you are working from a
+forked version, then you will need to change `glciampaglia/` to your forked
+version.
+
+See the recommended [Pipenv
+workflow](https://pipenv.pypa.io/en/latest/workflows.html) for how to add new
+packages to the development environment. 
+
+### Additional method (as a development environment): using pip
+
+If not using `pipenv`, a `requirements.txt` file pinned to the same environment from Pipenv's lock file is provided for compability:
+
+```shell
+git clone https://github.com/glciampaglia/unshorten-fast.git
+cd unshorten-fast
+pip install -e . -r requirements.txt
 ```
 
 ## Running
