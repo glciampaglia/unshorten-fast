@@ -109,6 +109,9 @@ unshorten <input_file> <output_file> [options]
 - `--cache-redis`: Use Redis cache instead of an in-memory dictionary. This
   allows to reuse cache across multiple usages.
 - `--debug`: Enable debug logging.
+- `--cache-redis-host`: Connect to this host when using Redis (default: localhost)
+- `--cache-redis-port`: Connect to this port when using Redis (default: 6379)
+- `--cache-redis-db`: Connect to this db when using Redis (default: 0)
 
 ## Examples
 
