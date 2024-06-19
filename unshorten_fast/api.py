@@ -13,7 +13,7 @@ from typing import Optional, List, Awaitable, Union
 from importlib.resources import files
 
 import aiohttp
-import redis
+from redis import asyncio as aioredis
 
 TTL_DNS_CACHE = 300  # Time-to-live of DNS cache
 MAX_TCP_CONN = 200  # Throttle at max these many simultaneous connections
@@ -43,7 +43,7 @@ _reset_stats()
 
 
 def _load_builtin_domains(path: str, 
-                          skip_header: Optional[bool] = True):
+                          skip_header: bool = True):
     with open(path) as f:
         if skip_header:
             f.readline()
@@ -112,7 +112,7 @@ async def unshortenone(url: str,
                        session: aiohttp.ClientSession,
                        pattern: Optional[re.Pattern] = None,
                        maxlen: Optional[int] = None,
-                       cache: Union[redis.Redis, dict, None] = None,
+                       cache: Union[aioredis.Redis, dict, None] = None,
                        timeout: Optional[aiohttp.ClientTimeout] = None) -> str:
     """
     Expands a single short URL using an aiohttp session.
@@ -144,9 +144,18 @@ async def unshortenone(url: str,
     if too_long or no_match:
         _STATS["ignored"] += 1
         return url
-    if cache is not None and url in cache:
+    if cache is not None:
+        cached_url = None
+        if isinstance(cache, dict) and url in cache:
+            cached_url = str(cache.get(url))
+        elif isinstance(cache, aioredis.Redis):
+            in_cache = await cache.exists(url)
+            if in_cache:
+                longurl = await cache.get(url) 
+                cached_url = str(longurl)
+    if cache is not None and cached_url is not None:
         _STATS["cached_retrieved"] += 1
-        return str(cache.get(url))
+        return cached_url
     else:
         try:
             # await asyncio.sleep(0.01)
@@ -165,7 +174,7 @@ async def unshortenone(url: str,
                     if isinstance(cache, dict):
                         cache[url] = expanded_url
                     else: # Redis
-                        cache.set(url, expanded_url)
+                        await cache.set(url, expanded_url)
             return expanded_url
         except (aiohttp.ClientError, asyncio.TimeoutError, UnicodeError) as e:
             req_stop = time.time()
@@ -198,13 +207,28 @@ async def gather_with_concurrency(n: int, *tasks: Awaitable) -> List:
 
 
 async def _unshorten(*urls: str,
-                     cache: Union[redis.Redis, dict, None] = None,
+                     no_cache: bool = False,
+                     cache_redis: bool = False,
+                     cache_redis_host: str = "localhost",
+                     cache_redis_port: int = 6379,
+                     cache_redis_db: int = 0,
                      domains: Optional[List[str]] = None,
                      maxlen: Optional[int] = None) -> List[str]:
     """
     See unshorten()
     """
     tic = time.time()
+    if no_cache:
+        cache = None
+    else:
+        if cache_redis:
+            logging.info(f"Caching to redis://{cache_redis_host}" \
+                            f":{cache_redis_port}/{cache_redis_db}")
+            cache = aioredis.Redis(host=cache_redis_host, port=cache_redis_port,
+                                db=cache_redis_db)
+        else:
+            logging.info("Caching to Python dict")
+            cache = {}
     _reset_stats()
     if domains is None:
         # Use builtin list by default.
@@ -225,6 +249,8 @@ async def _unshorten(*urls: str,
                                                   maxlen=maxlen,
                                                   pattern=pattern,
                                                   timeout=timeout) for u in urls))
+        if cache is not None and cache_redis:
+            await cache.close()
     toc = time.time()
     elapsed = toc - tic
     rate = len(urls) / elapsed
@@ -238,7 +264,11 @@ def unshorten(*args, **kwargs) -> List[str]:
 
     Args:
         *urls: The URLs to expand.
-        cache: A Python dictionary / redis.Redis instance for caching expanded URLs.
+        no_cache: Whether to disable the cache or not
+        cache_redis: Whether to use Redis for the cache
+        cache_redis_host: defaults to "localhost"
+        cache_redis_port: defaults 6379
+        cache_redis_db: defaults to 0
         domains: A list of known URL shortening domains. Will attempt
             unshortening an URL only if the domain is in this list. If None, load
             builtin list. Pass an empty list to disable checking known domains.
@@ -284,20 +314,10 @@ def _main(args: argparse.Namespace) -> None:
     try:
         logging.basicConfig(level=args.log_level, format=LOG_FMT, force=True)
         logging.info(args)
-        if args.no_cache:
-            cache = None
-        else:
-            if args.cache_redis:
-                logging.info(f"Caching to redis://{args.cache_redis_host}" \
-                             f":{args.cache_redis_port}/{args.cache_redis_db}")
-                cache = redis.Redis(host=args.cache_redis_host, port=args.cache_redis_port,
-                                    db=args.cache_redis_db)
-            else:
-                logging.info("Caching to Python dict")
-                cache = {}
         with open(args.input, encoding="utf8") as inputf:
             shorturls = (url.strip(" \n") for url in inputf)
-            urls = unshorten(*shorturls, cache=cache, domains=args.domains,
+            urls = unshorten(*shorturls, no_cache=args.no_cache, 
+                             cache_redis=args.cache_redis, domains=args.domains,
                              maxlen=args.maxlen)
         with open(args.output, "w", encoding="utf8") as outf:
             outf.writelines((u + "\n" for u in urls))
