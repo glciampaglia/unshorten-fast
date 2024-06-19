@@ -1,6 +1,7 @@
 """ Fast URL unshortener """
 
 import re
+import math
 import time
 import asyncio
 import logging
@@ -263,7 +264,10 @@ def _log_elapsed_ms(seq: List[float], what: str):
     """
     if seq:
         elap_av = mean(seq) * 1e3
-        elap_sd = stdev(seq) * 1e3
+        if len(seq) > 1:
+            elap_sd = stdev(seq) * 1e3
+        else:
+            elap_sd = math.nan
         logging.info(f"{what}: {elap_av:.2f}±{elap_sd:.2f} ms")
     else:
         logging.info(f"{what}: N/A")
