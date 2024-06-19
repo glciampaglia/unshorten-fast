@@ -24,17 +24,21 @@ DOMAINS = files("unshorten_fast").joinpath("shorturl-services-list.csv")
 LOG_FMT = "%(asctime)s:%(levelname)s:%(message)s"
 logging.basicConfig(format=LOG_FMT, level="INFO")
 
-# XXX init stats
-_STATS = {
-    "ignored": 0,
-    "timeout": 0,
-    "error": 0,
-    "cached": 0,
-    "cached_retrieved": 0,
-    "expanded": 0,
-    "elapsed_a": [],
-    "elapsed_e": [],
-}
+def _reset_stats():
+    global _STATS
+    _STATS = {
+        "ignored": 0,
+        "timeout": 0,
+        "error": 0,
+        "cached": 0,
+        "cached_retrieved": 0,
+        "expanded": 0,
+        "elapsed_a": [],
+        "elapsed_e": [],
+    }
+
+_STATS = None
+_reset_stats()
 
 
 def _load_builtin_domains(path: str, 
@@ -199,6 +203,8 @@ async def _unshorten(*urls: str,
     """
     See unshorten()
     """
+    tic = time.time()
+    _reset_stats()
     if domains is None:
         # Use builtin list by default.
         domains = _load_builtin_domains(DOMAINS)
@@ -213,11 +219,17 @@ async def _unshorten(*urls: str,
     u1 = unshortenone
     timeout = aiohttp.ClientTimeout(total=TIMEOUT_TOTAL)
     async with aiohttp.ClientSession(connector=conn) as session:
-        return await gather_with_concurrency(MAX_TCP_CONN,
+        results = await gather_with_concurrency(MAX_TCP_CONN,
                                              *(u1(u, session, cache=cache,
                                                   maxlen=maxlen,
                                                   pattern=pattern,
                                                   timeout=timeout) for u in urls))
+    toc = time.time()
+    elapsed = toc - tic
+    rate = len(urls) / elapsed
+    logging.info(f"Processed {len(urls)} urls in {elapsed:.2f}s ({rate:.2f} urls/s))")
+    return results
+
 
 def unshorten(*args, **kwargs) -> List[str]:
     """
@@ -234,7 +246,15 @@ def unshorten(*args, **kwargs) -> List[str]:
     Returns:
         A list of the expanded URLs.
     """
-    return asyncio.run(_unshorten(*args, **kwargs))
+    try:
+        return asyncio.run(_unshorten(*args, **kwargs))
+    finally:
+        _log_elapsed_ms(_STATS['elapsed_a'], "Elapsed (all)")
+        _log_elapsed_ms(_STATS['elapsed_e'], "Elapsed (expanded)")
+        logging.info(f"Ignored: {_STATS['ignored']:.0f}")
+        logging.info(f"Expanded: {_STATS['expanded']:.0f}")
+        logging.info(f"Cached: {_STATS['cached']:.0f} ({_STATS['cached_retrieved']:.0f} hits)")
+        logging.info(f"Errors: {_STATS['error']:.0f} ({_STATS['timeout']:.0f} timed out)")
 
 
 def _log_elapsed_ms(seq: List[float], what: str):
@@ -242,9 +262,9 @@ def _log_elapsed_ms(seq: List[float], what: str):
     Log elapsed time
     """
     if seq:
-        elap_av = mean(seq) / 1e3
-        elap_sd = stdev(seq) / 1e3
-        logging.info(f"{what}: {elap_av:.5f}±{elap_sd:.5f} ms")
+        elap_av = mean(seq) * 1e3
+        elap_sd = stdev(seq) * 1e3
+        logging.info(f"{what}: {elap_av:.2f}±{elap_sd:.2f} ms")
     else:
         logging.info(f"{what}: N/A")
 
@@ -271,28 +291,16 @@ def _main(args: argparse.Namespace) -> None:
             else:
                 logging.info("Caching to Python dict")
                 cache = {}
-        tic = time.time()
         with open(args.input, encoding="utf8") as inputf:
             shorturls = (url.strip(" \n") for url in inputf)
             urls = unshorten(*shorturls, cache=cache, domains=args.domains,
                              maxlen=args.maxlen)
         with open(args.output, "w", encoding="utf8") as outf:
             outf.writelines((u + "\n" for u in urls))
-        toc = time.time()
-        elapsed = toc - tic
-        rate = len(urls) / elapsed
-        logging.info(f"Processed {len(urls)} urls in {elapsed:.2f}s ({rate:.2f} urls/s))")
     except KeyboardInterrupt:
         import sys
         print(file=sys.stderr)
         logging.info("Interrupted by user.")
-    finally:
-        _log_elapsed_ms(_STATS['elapsed_a'], "Elapsed (all)")
-        _log_elapsed_ms(_STATS['elapsed_e'], "Elapsed (expanded)")
-        logging.info(f"Ignored: {_STATS['ignored']:.0f}")
-        logging.info(f"Expanded: {_STATS['expanded']:.0f}")
-        logging.info(f"Cached: {_STATS['cached']:.0f} ({_STATS['cached_retrieved']:.0f} hits)")
-        logging.info(f"Errors: {_STATS['error']:.0f} ({_STATS['timeout']:.0f} timed out)")
 
 
 def main() -> None:
