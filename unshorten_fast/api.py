@@ -1,4 +1,5 @@
-""" Expand URLs from shortening services """
+""" Fast URL unshortener """
+
 import re
 import time
 import asyncio
@@ -8,6 +9,7 @@ import argparse
 from statistics import mean, stdev
 from urllib.parse import urlsplit
 from typing import Optional, List, Awaitable, Union 
+from importlib.resources import files
 
 import aiohttp
 import redis
@@ -16,9 +18,13 @@ TTL_DNS_CACHE = 300  # Time-to-live of DNS cache
 MAX_TCP_CONN = 200  # Throttle at max these many simultaneous connections
 TIMEOUT_TOTAL = 10  # Each request times out after these many seconds
 
+# Using list from https://github.com/sambokai/ShortURL-Services-List
+DOMAINS = files("unshorten_fast").joinpath("shorturl-services-list.csv")
+
 LOG_FMT = "%(asctime)s:%(levelname)s:%(message)s"
 logging.basicConfig(format=LOG_FMT, level="INFO")
 
+# XXX init stats
 _STATS = {
     "ignored": 0,
     "timeout": 0,
@@ -31,30 +37,45 @@ _STATS = {
 }
 
 
+def _load_builtin_domains(path: str, 
+                          skip_header: Optional[bool] = True):
+    with open(path) as f:
+        if skip_header:
+            f.readline()
+        domains = [line.strip(',\n') for line in f]
+        logging.debug(f"Loaded {len(domains)} from builtin list at {path}.")
+        return domains
+
+
 def make_parser() -> argparse.ArgumentParser:
     """
-    Creates an ArgumentParser object with the script's command-line options.
+    Creates an ArgumentParser object with the script's command-line options. 
 
     Returns:
         An argparse.ArgumentParser object configured with the script's options.
     """
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.set_defaults(log_level="INFO", domains=_load_builtin_domains(DOMAINS))
     parser.add_argument("input")
     parser.add_argument("output")
     parser.add_argument("-m",
                         "--maxlen",
                         type=int,
                         metavar="LEN",
-                        help="Ignore domains longer than %(metavar)s")
+                        help="Do not expand URLs longer than %(metavar)s")
+    parser.add_argument("-n",
+                        "--no-builtin-domains",
+                        action="store_const",
+                        dest="domains",
+                        const=[],
+                        help="Do not use builtin list of known URL shortening services")
     parser.add_argument("-d",
                         "--domains",
-                        dest="domains_path",
-                        metavar="PATH",
-                        help="Expand if domain is present in CSV file at %(metavar)s")
-    parser.add_argument("--domains-noheader",
-                        action="store_false",
-                        dest="skip_header",
-                        help="CSV file with domains has no header")
+                        dest="domains",
+                        action="extend",
+                        nargs="+",
+                        metavar="DOMAIN",
+                        help="Expand if URL is from %(metavar)s")
     parser.add_argument("--no-cache",
                         action="store_true",
                         help="disable cache")
@@ -62,7 +83,6 @@ def make_parser() -> argparse.ArgumentParser:
                         action="store_const",
                         const="DEBUG",
                         dest="log_level")
-    parser.set_defaults(log_level="INFO")
     parser.add_argument("--cache-redis",
                         action="store_true",
                         help="use redis cache")
@@ -179,11 +199,15 @@ async def _unshorten(*urls: str,
     """
     See unshorten()
     """
-    if domains is not None:
+    if domains is None:
+        # Use builtin list by default.
+        domains = _load_builtin_domains(DOMAINS)
+    if domains:
         # match only the tail end of netloc
         doms = (d + '$' for d in domains)
         pattern = re.compile(f"({'|'.join(doms)})", re.I)
     else:
+        # domains is an empty list
         pattern = None
     conn = aiohttp.TCPConnector(ttl_dns_cache=TTL_DNS_CACHE, limit=None)
     u1 = unshortenone
@@ -202,7 +226,9 @@ def unshorten(*args, **kwargs) -> List[str]:
     Args:
         *urls: The URLs to expand.
         cache: A Python dictionary / redis.Redis instance for caching expanded URLs.
-        domains: A list of domains to filter URLs by.
+        domains: A list of known URL shortening domains. Will attempt
+            unshortening an URL only if the domain is in this list. If None, load
+            builtin list. Pass an empty list to disable checking known domains.
         maxlen: The maximum length of the URLs to expand.
 
     Returns:
@@ -211,7 +237,10 @@ def unshorten(*args, **kwargs) -> List[str]:
     return asyncio.run(_unshorten(*args, **kwargs))
 
 
-def _log_elapsed_ms(seq, what):
+def _log_elapsed_ms(seq: List[float], what: str):
+    """
+    Log elapsed time
+    """
     if seq:
         elap_av = mean(seq) / 1e3
         elap_sd = stdev(seq) / 1e3
@@ -231,26 +260,21 @@ def _main(args: argparse.Namespace) -> None:
     try:
         logging.basicConfig(level=args.log_level, format=LOG_FMT, force=True)
         logging.info(args)
-        if args.domains_path is not None:
-            with open(args.domains_path) as f:
-                if args.skip_header:
-                    f.readline()
-                domains = [line.strip(',\n') for line in f]
-        else:
-            domains = None
         if args.no_cache:
             cache = None
         else:
             if args.cache_redis:
-                cache = redis.Redis(host=args.cache_redis_host,
-                                    port=args.cache_redis_port,
+                logging.info(f"Caching to redis://{args.cache_redis_host}" \
+                             f":{args.cache_redis_port}/{args.cache_redis_db}")
+                cache = redis.Redis(host=args.cache_redis_host, port=args.cache_redis_port,
                                     db=args.cache_redis_db)
             else:
+                logging.info("Caching to Python dict")
                 cache = {}
         tic = time.time()
         with open(args.input, encoding="utf8") as inputf:
             shorturls = (url.strip(" \n") for url in inputf)
-            urls = unshorten(*shorturls, cache=cache, domains=domains,
+            urls = unshorten(*shorturls, cache=cache, domains=args.domains,
                              maxlen=args.maxlen)
         with open(args.output, "w", encoding="utf8") as outf:
             outf.writelines((u + "\n" for u in urls))

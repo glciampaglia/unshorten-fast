@@ -15,8 +15,9 @@ supports caching of expanded URLs to reduce the number of requests.
 - Uses HTTP's HEAD command instead of GET to reduce bandwidth;
 - Caching to reduce amount of requests sent;
   - In-memory dictionary (default)
-  - Redis queue (_requires Redis installed_)
+  - Redis queue for persistent caching (_requires Redis installed_)
 - Flexible inclusion criteria:
+  - Default domain inclusion list based on curated list of 600+ known URL shortening services (h/t [sambokai/ShortURL-Services-List](https://github.com/sambokai/ShortURL-Services-List));
   + User-defined domain inclusion list;
   - URL length;
 - Detailed logging and statistics tracking
@@ -91,20 +92,21 @@ pip install -e . -r requirements.txt
 ## Usage
 
 ```shell
-unshorten <input_file> <output_file> [options]
+unshorten <input_file> <output_file> [optional arguments]
 ```
 
-### Arguments
+### Required Arguments
 
 - `<input_file>`: Path to the file containing short URLs, one per line.
 - `<output_file>`: Path to the file where expanded URLs will be written.
 
-### Options
+### Optional Arguments
 
 - `-m LEN`, `--maxlen LEN`: Ignore domains longer than `LEN` characters.
 - `-d PATH`, `--domains PATH`: Expand a URL only if its domain is present in the CSV
   file at `PATH`.
-- `--domains-noheader`: Specify that the CSV file with domains has no header row.
+- `--no-builtin-domains`: Do not use builtin domains list.
+- `--domains`: Unshorten URL if it is from any of these domains.
 - `--no-cache`: Disable caching of expanded URLs.
 - `--cache-redis`: Use Redis cache instead of an in-memory dictionary. This
   allows to reuse cache across multiple usages.
