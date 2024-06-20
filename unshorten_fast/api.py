@@ -162,10 +162,7 @@ async def unshortenone(url: str,
             req_start = time.time()
             resp = await session.head(url, timeout=timeout,
                                       ssl=False, allow_redirects=True)
-            req_stop = time.time()
-            elapsed = req_stop - req_start
             expanded_url = str(resp.url)
-            _STATS['elapsed_a'].append(elapsed)
             if url != expanded_url:
                 _STATS['expanded'] += 1
                 _STATS['elapsed_e'].append(elapsed)
@@ -177,14 +174,15 @@ async def unshortenone(url: str,
                         await cache.set(url, expanded_url)
             return expanded_url
         except (aiohttp.ClientError, asyncio.TimeoutError, UnicodeError) as e:
-            req_stop = time.time()
-            elapsed = req_stop - req_start
-            _STATS['elapsed_a'].append(elapsed)
             _STATS["error"] += 1
             if isinstance(e, asyncio.TimeoutError):
                 _STATS["timeout"] += 1
             logging.debug(f"{e.__class__.__name__}: {e}: {url}")
             return url
+        finally:
+            req_stop = time.time()
+            elapsed = req_stop - req_start
+            _STATS['elapsed_a'].append(elapsed)
 
 
 # Thanks: https://blog.jonlu.ca/posts/async-python-http
