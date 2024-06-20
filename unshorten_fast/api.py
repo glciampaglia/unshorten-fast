@@ -238,7 +238,6 @@ async def _unshorten(*urls: str,
     else:
         # domains is an empty list
         pattern = None
-    try:
     conn = aiohttp.TCPConnector(ttl_dns_cache=TTL_DNS_CACHE, limit=None)
     timeout = aiohttp.ClientTimeout(total=TIMEOUT_TOTAL)
     async with aiohttp.ClientSession(connector=conn) as session:
