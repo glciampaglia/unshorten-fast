@@ -240,17 +240,18 @@ async def _unshorten(*urls: str,
     else:
         # domains is an empty list
         pattern = None
+    try:
     conn = aiohttp.TCPConnector(ttl_dns_cache=TTL_DNS_CACHE, limit=None)
-    u1 = unshortenone
     timeout = aiohttp.ClientTimeout(total=TIMEOUT_TOTAL)
     async with aiohttp.ClientSession(connector=conn) as session:
-        results = await gather_with_concurrency(MAX_TCP_CONN,
-                                             *(u1(u, session, cache=cache,
-                                                  maxlen=maxlen,
-                                                  pattern=pattern,
-                                                  timeout=timeout) for u in urls))
-        if cache is not None and cache_redis:
-            await cache.close()
+        try:
+            u1 = unshortenone
+            urliter = (u1(u, session, cache=cache, maxlen=maxlen, pattern=pattern, 
+                          timeout=timeout) for u in urls)
+            results = await gather_with_concurrency(MAX_TCP_CONN, *urliter)
+        finally:
+            if cache is not None and cache_redis:
+                await cache.close()
     toc = time.time()
     elapsed = toc - tic
     rate = len(urls) / elapsed
