@@ -163,6 +163,9 @@ async def unshortenone(url: str,
             resp = await session.head(url, timeout=timeout,
                                       ssl=False, allow_redirects=True)
             expanded_url = str(resp.url)
+            req_stop = time.time()
+            elapsed = req_stop - req_start
+            _STATS['elapsed_a'].append(elapsed)
             if url != expanded_url:
                 _STATS['expanded'] += 1
                 _STATS['elapsed_e'].append(elapsed)
@@ -179,10 +182,6 @@ async def unshortenone(url: str,
                 _STATS["timeout"] += 1
             logging.debug(f"{e.__class__.__name__}: {e}: {url}")
             return url
-        finally:
-            req_stop = time.time()
-            elapsed = req_stop - req_start
-            _STATS['elapsed_a'].append(elapsed)
 
 
 # Thanks: https://blog.jonlu.ca/posts/async-python-http
