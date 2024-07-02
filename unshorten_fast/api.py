@@ -14,6 +14,7 @@ from importlib.resources import files
 
 import aiohttp
 from redis import asyncio as aioredis
+import redis
 
 TTL_DNS_CACHE = 300  # Time-to-live of DNS cache
 MAX_TCP_CONN = 200  # Throttle at max these many simultaneous connections
@@ -222,7 +223,8 @@ async def _unshorten(*urls: str,
             logging.info(f"Caching to redis://{cache_redis_host}" \
                             f":{cache_redis_port}/{cache_redis_db}")
             cache = aioredis.Redis(host=cache_redis_host, port=cache_redis_port,
-                                db=cache_redis_db)
+                                   db=cache_redis_db)
+            await cache.ping()
         else:
             logging.info("Caching to Python dict")
             cache = {}
@@ -247,7 +249,7 @@ async def _unshorten(*urls: str,
             results = await gather_with_concurrency(MAX_TCP_CONN, *urliter)
         finally:
             if cache is not None and cache_redis:
-                await cache.close()
+                await cache.aclose()
     toc = time.time()
     elapsed = toc - tic
     rate = len(urls) / elapsed
@@ -313,9 +315,14 @@ def _main(args: argparse.Namespace) -> None:
         logging.info(args)
         with open(args.input, encoding="utf8") as inputf:
             shorturls = (url.strip(" \n") for url in inputf)
-            urls = unshorten(*shorturls, no_cache=args.no_cache, 
-                             cache_redis=args.cache_redis, domains=args.domains,
-                             maxlen=args.maxlen)
+            try:
+                urls = unshorten(*shorturls, no_cache=args.no_cache, 
+                                cache_redis=args.cache_redis, domains=args.domains,
+                                maxlen=args.maxlen)
+            except redis.ConnectionError:
+                logging.error("Failed to connect to redis cache! Is Redis running?")
+                import sys
+                sys.exit(1)
         with open(args.output, "w", encoding="utf8") as outf:
             outf.writelines((u + "\n" for u in urls))
     except KeyboardInterrupt:
