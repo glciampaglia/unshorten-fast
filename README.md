@@ -5,9 +5,10 @@ This Python script expands short URLs created with URL shortening services
 [asynchronous HTTP requests](https://docs.aiohttp.org/) to run multiple web
 requests concurrently. It reads a file containing a URL per line and writes an
 output with short URLs replaced with their expanded version. The script
-provides options to expand URLs based on their domain (if a list of URL
-shortening services domains is provided) and on their total length, and
-supports caching of expanded URLs to reduce the number of requests. 
+provides options to expand URLs based on their domain (a list of common URL
+shortening services domains is bundled with the package and used automatically,
+but additional ones can be supplied via command line) and on their total
+length, and supports caching of expanded URLs to reduce the number of requests. 
 
 ## Features
 
@@ -17,7 +18,9 @@ supports caching of expanded URLs to reduce the number of requests.
   - In-memory dictionary (default)
   - Redis queue for persistent caching (_requires Redis installed_)
 - Flexible inclusion criteria:
-  - Default domain inclusion list based on curated list of 600+ known URL shortening services (h/t [sambokai/ShortURL-Services-List](https://github.com/sambokai/ShortURL-Services-List));
+  - Default domain inclusion list based on curated list of 600+ known URL
+    shortening services (h/t
+    [sambokai/ShortURL-Services-List](https://github.com/sambokai/ShortURL-Services-List));
   + User-defined domain inclusion list;
   - URL length;
 - Detailed logging and statistics tracking
@@ -50,7 +53,10 @@ pipx install git+https://github.com/glciampaglia/unshorten-fast.git
 
 ### Recommended (as a dependency): using pip
 
-If you are looking to import `unshorten_fast` in your code, you will need to install it in your environment. At the moment the package has not been published on PyPI yet, so the simplest way is to point `pip` directly to a Github repository, for example the main one (`glciampaglia/unshorten-fast`).
+If you are looking to import `unshorten_fast` in your code, you will need to
+install it in your environment. At the moment the package has not been
+published on PyPI yet, so the simplest way is to point `pip` directly to a
+Github repository, for example the main one (`glciampaglia/unshorten-fast`).
 
 ```shell
 pip install git+https://github.com/glciampaglia/unshorten-fast.git
@@ -61,7 +67,12 @@ If you want to install a forked version, then you will need to change
 
 ### Additional method (as a development environment): using pipenv
 
-If you plan to make changes to **unshorten-fast**, you will probably want to checkout the code from Github and create an editable install that allows you to modify the code but still make use of the command line tool as an entry point. To reproduce the same environment used to develop **unshorten-fast**, the recommended way is to use [Pipenv](https://pipenv/pypa.io), a dependency management tool. This will checkout **unshorten-fast**'s code and create 
+If you plan to make changes to **unshorten-fast**, you will probably want to
+checkout the code from Github and create an editable install that allows you to
+modify the code but still make use of the command line tool as an entry point.
+To reproduce the same environment used to develop **unshorten-fast**, the
+recommended way is to use [Pipenv](https://pipenv/pypa.io), a dependency
+management tool. This will checkout **unshorten-fast**'s code and create 
 
 ```shell
 git clone https://github.com/glciampaglia/unshorten-fast.git
@@ -81,7 +92,8 @@ packages to the development environment.
 
 ### Additional method (as a development environment): using pip
 
-If not using `pipenv`, a `requirements.txt` file pinned to the same environment from Pipenv's lock file is provided for compability:
+If not using `pipenv`, a `requirements.txt` file pinned to the same environment
+from Pipenv's lock file is provided for compability:
 
 ```shell
 git clone https://github.com/glciampaglia/unshorten-fast.git
