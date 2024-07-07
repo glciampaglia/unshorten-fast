@@ -115,6 +115,11 @@ unshorten <input_file> <output_file> [optional arguments]
 - `--cache-redis-port`: Connect to this port when using Redis (default: 6379)
 - `--cache-redis-db`: Connect to this db when using Redis (default: 0)
 
+### Environment variables
+
+* `REDIS_URL`: of the form `redis://HOST:PORT/DB`. If set, this value will take
+  precedence over the `--cache-redis-*` command line arguments.
+
 ## Examples
 
 Expand URLs from `input.txt` and write the expanded URLs to `output.txt`:

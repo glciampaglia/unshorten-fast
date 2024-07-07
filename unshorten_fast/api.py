@@ -1,20 +1,20 @@
 """ Fast URL unshortener """
 
-import re
-import math
-import time
+import argparse
 import asyncio
 import logging
-import argparse
-
-from statistics import mean, stdev
-from urllib.parse import urlsplit
-from typing import Optional, List, Awaitable, Union
-from importlib.resources import files
+import math
+import os
+import re
+import time
 
 import aiohttp
-from redis import asyncio as aioredis
 import redis
+from importlib.resources import files
+from redis import asyncio as aioredis
+from statistics import mean, stdev
+from typing import Optional, List, Awaitable, Union
+from urllib.parse import urlsplit
 
 TTL_DNS_CACHE = 300  # Time-to-live of DNS cache
 MAX_TCP_CONN = 200  # Throttle at max these many simultaneous connections
@@ -232,11 +232,10 @@ async def _unshorten(*urls: str,
         cache = None
     else:
         if cache_redis:
-            _logger.info(f"Caching to redis://{cache_redis_host}"
-                         f":{cache_redis_port}/{cache_redis_db}")
-            cache = aioredis.Redis(host=cache_redis_host,
-                                   port=cache_redis_port,
-                                   db=cache_redis_db)
+            REDIS_URL = os.getenv("REDIS_URL", f"redis://{cache_redis_host}:"
+                                  "{cache_redis_port}/{cache_redis_db}")
+            _logger.info(f"Caching to {REDIS_URL}")
+            cache = aioredis.from_url(REDIS_URL)
             await cache.ping()
         else:
             _logger.info("Caching to Python dict")
