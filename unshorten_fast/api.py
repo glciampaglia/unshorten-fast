@@ -61,7 +61,8 @@ def make_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.set_defaults(log_level="INFO",
-                        domains=_load_builtin_domains(DOMAINS))
+                        domains=_load_builtin_domains(DOMAINS),
+                        no_cache=False)
     parser.add_argument("input")
     parser.add_argument("output")
     parser.add_argument("-m",
@@ -217,7 +218,7 @@ async def gather_with_concurrency(n: int, *tasks: Awaitable) -> List:
 
 
 async def _unshorten(*urls: str,
-                     no_cache: bool = False,
+                     no_cache: bool = True,
                      cache_redis: bool = False,
                      cache_redis_host: str = "localhost",
                      cache_redis_port: int = 6379,
@@ -276,7 +277,7 @@ def unshorten(*args, **kwargs) -> List[str]:
 
     Args:
         *urls: The URLs to expand.
-        no_cache: Whether to disable the cache or not
+        no_cache: Whether to disable the cache or not (default is True)
         cache_redis: Whether to use Redis for the cache
         cache_redis_host: defaults to "localhost"
         cache_redis_port: defaults 6379
