@@ -40,6 +40,7 @@ def _reset_stats():
 
 _STATS = None
 _reset_stats()
+_logger = logging.getLogger(__package__)
 
 
 def _load_builtin_domains(path: str, skip_header: bool = True):
@@ -47,7 +48,7 @@ def _load_builtin_domains(path: str, skip_header: bool = True):
         if skip_header:
             f.readline()
         domains = [line.strip(',\n') for line in f]
-        logging.debug(f"Loaded {len(domains)} from builtin list at {path}.")
+        _logger.debug(f"Loaded {len(domains)} from builtin list at {path}.")
         return domains
 
 
@@ -85,6 +86,11 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-cache",
                         action="store_true",
                         help="disable cache")
+    parser.add_argument("-q", "--quiet",
+                        action="store_const",
+                        const="WARN",
+                        dest="log_level",
+                        help="Print only warnings and errors")
     parser.add_argument("--debug",
                         action="store_const",
                         const="DEBUG",
@@ -187,7 +193,7 @@ async def unshortenone(url: str,  # noqa: C901
             _STATS["error"] += 1
             if isinstance(e, asyncio.TimeoutError):
                 _STATS["timeout"] += 1
-            logging.debug(f"{e.__class__.__name__}: {e}: {url}")
+            _logger.debug(f"{e.__class__.__name__}: {e}: {url}")
             return url
 
 
@@ -226,14 +232,14 @@ async def _unshorten(*urls: str,
         cache = None
     else:
         if cache_redis:
-            logging.info(f"Caching to redis://{cache_redis_host}"
+            _logger.info(f"Caching to redis://{cache_redis_host}"
                          f":{cache_redis_port}/{cache_redis_db}")
             cache = aioredis.Redis(host=cache_redis_host,
                                    port=cache_redis_port,
                                    db=cache_redis_db)
             await cache.ping()
         else:
-            logging.info("Caching to Python dict")
+            _logger.info("Caching to Python dict")
             cache = {}
     _reset_stats()
     if domains is None:
@@ -260,7 +266,7 @@ async def _unshorten(*urls: str,
     toc = time.time()
     elapsed = toc - tic
     rate = len(urls) / elapsed
-    logging.info(f"Processed {len(urls)} urls in {elapsed:.2f}s ({rate:.2f} "
+    _logger.info(f"Processed {len(urls)} urls in {elapsed:.2f}s ({rate:.2f} "
                  "urls/s))")
     return results
 
@@ -290,12 +296,12 @@ def unshorten(*args, **kwargs) -> List[str]:
     finally:
         _log_elapsed_ms(_STATS['elapsed_a'], "Elapsed (all)")
         _log_elapsed_ms(_STATS['elapsed_e'], "Elapsed (expanded)")
-        logging.info(f"Ignored: {_STATS['ignored']:.0f}")
-        logging.info(f"Expanded: {_STATS['expanded']:.0f}")
-        logging.info(f"Cached: {_STATS['cached']:.0f} "
-                     "({_STATS['cached_retrieved']:.0f} hits)")
-        logging.info(f"Errors: {_STATS['error']:.0f} "
-                     "({_STATS['timeout']:.0f} timed out)")
+        _logger.info(f"Ignored: {_STATS['ignored']:.0f}")
+        _logger.info(f"Expanded: {_STATS['expanded']:.0f}")
+        _logger.info(f"Cached: {_STATS['cached']:.0f} "
+                     f"({_STATS['cached_retrieved']:.0f} hits)")
+        _logger.info(f"Errors: {_STATS['error']:.0f} "
+                     f"({_STATS['timeout']:.0f} timed out)")
 
 
 def _log_elapsed_ms(seq: List[float], what: str):
@@ -308,9 +314,9 @@ def _log_elapsed_ms(seq: List[float], what: str):
             elap_sd = stdev(seq) * 1e3
         else:
             elap_sd = math.nan
-        logging.info(f"{what}: {elap_av:.2f}±{elap_sd:.2f} ms")
+        _logger.info(f"{what}: {elap_av:.2f}±{elap_sd:.2f} ms")
     else:
-        logging.info(f"{what}: N/A")
+        _logger.info(f"{what}: N/A")
 
 
 def _main(args: argparse.Namespace) -> None:
@@ -322,9 +328,8 @@ def _main(args: argparse.Namespace) -> None:
         arguments.
     """
     try:
-        logger = logging.getLogger(__package__)
-        logger.setLever(args.log_level)
-        logger.info(args)
+        logging.basicConfig(level=args.log_level, force=True)
+        _logger.info(args)
         with open(args.input, encoding="utf8") as inputf:
             shorturls = (url.strip(" \n") for url in inputf)
             try:
@@ -332,8 +337,8 @@ def _main(args: argparse.Namespace) -> None:
                                  cache_redis=args.cache_redis,
                                  domains=args.domains, maxlen=args.maxlen)
             except redis.ConnectionError:
-                logger.error("Failed to connect to redis cache! "
-                             "Is Redis running?")
+                _logger.error("Failed to connect to redis cache! "
+                              "Is Redis running?")
                 import sys
                 sys.exit(1)
         with open(args.output, "w", encoding="utf8") as outf:
@@ -341,7 +346,7 @@ def _main(args: argparse.Namespace) -> None:
     except KeyboardInterrupt:
         import sys
         print(file=sys.stderr)
-        logging.info("Interrupted by user.")
+        _logger.info("Interrupted by user.")
 
 
 def main() -> None:
