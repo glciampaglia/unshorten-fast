@@ -16,6 +16,9 @@ from statistics import mean, stdev
 from typing import Optional, List, Awaitable, Union
 from urllib.parse import urlsplit
 
+__all__ = ['unshorten']
+
+
 TTL_DNS_CACHE = 300  # Time-to-live of DNS cache
 MAX_TCP_CONN = 200  # Throttle at max these many simultaneous connections
 TIMEOUT_TOTAL = 10  # Each request times out after these many seconds

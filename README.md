@@ -132,6 +132,56 @@ unshorten <input_file> <output_file> [optional arguments]
 * `REDIS_URL`: of the form `redis://HOST:PORT/DB`. If set, this value will take
   precedence over the `--cache-redis-*` command line arguments.
 
+## Programmatic usage
+
+For usage in scripts as a third-party dependency, the module offers one
+function called `unshorten`. This is just a wrapper around
+`unshorten_fast.api._unshorten` which is an awaitable function. The wrapper
+simply schedules a call of `_unshorten` in the main event loop. As such, the
+wrapper simply passes any position and keyword arguments to `_unshorten`. The
+docstring of `_unshorten` lists all accepted arguments that are actually
+accepted:
+
+    Positional args:
+        *urls: The URLs to expand.
+
+    Keyword args:
+        no_cache: Whether to disable the cache or not (default is True)
+        cache_redis: Whether to use Redis for the cache
+        cache_redis_host: defaults to "localhost"
+        cache_redis_port: defaults 6379
+        cache_redis_db: defaults to 0
+        domains: A list of known URL shortening domains. Will attempt
+            unshortening an URL only if the domain is in this list. If None,
+            load builtin list. Pass an empty list to disable checking known
+            domains.
+        maxlen: The maximum length of the URLs to expand.
+
+    Returns:
+        A list of the expanded URLs.
+
+Note that URLs are taken as positional arguments, so if you have a list of URLs
+you will need to unpack it when passing it to the function, like this:
+
+```python
+from unshorten_fast import unshorten
+
+# These are not really URLs of shortening services
+short = [
+    "https://example.com",
+    "https://example.com/hello
+]
+
+expanded = unshorten(*URLs)
+```
+
+### Caching when used programmatically
+
+Note that by default `no_cache` is set to True in `unshorten()` as we make no
+assumptions about the intention of callers vis a vis to caching. If
+unshorten-fast is used from the command line, the cache is by default turned
+on.
+
 ## Examples
 
 Expand URLs from `input.txt` and write the expanded URLs to `output.txt`:
