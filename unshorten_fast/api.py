@@ -9,7 +9,7 @@ import argparse
 
 from statistics import mean, stdev
 from urllib.parse import urlsplit
-from typing import Optional, List, Awaitable, Union 
+from typing import Optional, List, Awaitable, Union
 from importlib.resources import files
 
 import aiohttp
@@ -23,8 +23,6 @@ TIMEOUT_TOTAL = 10  # Each request times out after these many seconds
 # Using list from https://github.com/sambokai/ShortURL-Services-List
 DOMAINS = files("unshorten_fast").joinpath("shorturl-services-list.csv")
 
-LOG_FMT = "%(asctime)s:%(levelname)s:%(message)s"
-logging.basicConfig(format=LOG_FMT, level="INFO")
 
 def _reset_stats():
     global _STATS
@@ -39,12 +37,12 @@ def _reset_stats():
         "elapsed_e": [],
     }
 
+
 _STATS = None
 _reset_stats()
 
 
-def _load_builtin_domains(path: str, 
-                          skip_header: bool = True):
+def _load_builtin_domains(path: str, skip_header: bool = True):
     with open(path) as f:
         if skip_header:
             f.readline()
@@ -55,13 +53,14 @@ def _load_builtin_domains(path: str,
 
 def make_parser() -> argparse.ArgumentParser:
     """
-    Creates an ArgumentParser object with the script's command-line options. 
+    Creates an ArgumentParser object with the script's command-line options.
 
     Returns:
         An argparse.ArgumentParser object configured with the script's options.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.set_defaults(log_level="INFO", domains=_load_builtin_domains(DOMAINS))
+    parser.set_defaults(log_level="INFO",
+                        domains=_load_builtin_domains(DOMAINS))
     parser.add_argument("input")
     parser.add_argument("output")
     parser.add_argument("-m",
@@ -74,7 +73,8 @@ def make_parser() -> argparse.ArgumentParser:
                         action="store_const",
                         dest="domains",
                         const=[],
-                        help="Do not use builtin list of known URL shortening services")
+                        help="Do not use builtin list of known URL shortening "
+                        "services")
     parser.add_argument("-d",
                         "--domains",
                         dest="domains",
@@ -95,21 +95,24 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cache-redis-host",
                         metavar="HOST",
                         default='localhost',
-                        help="Connect to this host for Redis (default: %(default)s)")
+                        help="Connect to this host for Redis (default: "
+                        "%(default)s)")
     parser.add_argument("--cache-redis-port",
                         metavar="PORT",
                         type=int,
                         default=6379,
-                        help="Connect to this port for Redis (default: %(default)d)")
+                        help="Connect to this port for Redis (default: "
+                        "%(default)d)")
     parser.add_argument("--cache-redis-db",
                         metavar="DB",
                         type=int,
                         default=0,
-                        help="Connect to this db for Redis (default: %(default)d)")
+                        help="Connect to this db for Redis (default: "
+                        "%(default)d)")
     return parser
 
 
-async def unshortenone(url: str, 
+async def unshortenone(url: str,  # noqa: C901
                        session: aiohttp.ClientSession,
                        pattern: Optional[re.Pattern] = None,
                        maxlen: Optional[int] = None,
@@ -121,17 +124,20 @@ async def unshortenone(url: str,
     Args:
         url: The short URL to expand.
         session: An aiohttp.ClientSession object for making HTTP requests.
-        pattern: A compiled regular expression to match against the URL's domain.
+        pattern: A compiled regular expression to match against the URL's
+            domain.
         maxlen: The maximum length of the URL to expand.
         cache: A dictionary for caching expanded URLs.
-        timeout: An aiohttp.ClientTimeout object specifying the request timeout.
+        timeout: An aiohttp.ClientTimeout object specifying the request
+            timeout.
 
     Returns:
         The expanded URL if successful, or the original URL if an error occurs
         or the URL is filtered out.
     """
     # If user specified list of domains, check netloc is in it, otherwise set
-    # to False (equivalent of saying there is always a match against the empty list)
+    # to False (equivalent of saying there is always a match against the empty
+    # list)
     if pattern is not None:
         domain = urlsplit(url).netloc
         match = re.search(pattern, domain)
@@ -152,7 +158,7 @@ async def unshortenone(url: str,
         elif isinstance(cache, aioredis.Redis):
             in_cache = await cache.exists(url)
             if in_cache:
-                longurl = await cache.get(url) 
+                longurl = await cache.get(url)
                 cached_url = str(longurl)
     if cache is not None and cached_url is not None:
         _STATS["cached_retrieved"] += 1
@@ -174,7 +180,7 @@ async def unshortenone(url: str,
                     _STATS["cached"] += 1
                     if isinstance(cache, dict):
                         cache[url] = expanded_url
-                    else: # Redis
+                    else:  # Redis
                         await cache.set(url, expanded_url)
             return expanded_url
         except (aiohttp.ClientError, asyncio.TimeoutError, UnicodeError) as e:
@@ -197,10 +203,10 @@ async def gather_with_concurrency(n: int, *tasks: Awaitable) -> List:
     Returns:
         A list of the results of the completed tasks.
     """
-    semaphore = asyncio.Semaphore(n)
     async def sem_task(task):
         async with semaphore:
             return await task
+    semaphore = asyncio.Semaphore(n)
     return await asyncio.gather(*(sem_task(task) for task in tasks))
 
 
@@ -220,9 +226,10 @@ async def _unshorten(*urls: str,
         cache = None
     else:
         if cache_redis:
-            logging.info(f"Caching to redis://{cache_redis_host}" \
-                            f":{cache_redis_port}/{cache_redis_db}")
-            cache = aioredis.Redis(host=cache_redis_host, port=cache_redis_port,
+            logging.info(f"Caching to redis://{cache_redis_host}"
+                         f":{cache_redis_port}/{cache_redis_db}")
+            cache = aioredis.Redis(host=cache_redis_host,
+                                   port=cache_redis_port,
                                    db=cache_redis_db)
             await cache.ping()
         else:
@@ -244,8 +251,8 @@ async def _unshorten(*urls: str,
     async with aiohttp.ClientSession(connector=conn) as session:
         try:
             u1 = unshortenone
-            urliter = (u1(u, session, cache=cache, maxlen=maxlen, pattern=pattern, 
-                          timeout=timeout) for u in urls)
+            urliter = (u1(u, session, cache=cache, maxlen=maxlen,
+                          pattern=pattern, timeout=timeout) for u in urls)
             results = await gather_with_concurrency(MAX_TCP_CONN, *urliter)
         finally:
             if cache is not None and cache_redis:
@@ -253,7 +260,8 @@ async def _unshorten(*urls: str,
     toc = time.time()
     elapsed = toc - tic
     rate = len(urls) / elapsed
-    logging.info(f"Processed {len(urls)} urls in {elapsed:.2f}s ({rate:.2f} urls/s))")
+    logging.info(f"Processed {len(urls)} urls in {elapsed:.2f}s ({rate:.2f} "
+                 "urls/s))")
     return results
 
 
@@ -269,8 +277,9 @@ def unshorten(*args, **kwargs) -> List[str]:
         cache_redis_port: defaults 6379
         cache_redis_db: defaults to 0
         domains: A list of known URL shortening domains. Will attempt
-            unshortening an URL only if the domain is in this list. If None, load
-            builtin list. Pass an empty list to disable checking known domains.
+            unshortening an URL only if the domain is in this list. If None,
+            load builtin list. Pass an empty list to disable checking known
+            domains.
         maxlen: The maximum length of the URLs to expand.
 
     Returns:
@@ -283,8 +292,10 @@ def unshorten(*args, **kwargs) -> List[str]:
         _log_elapsed_ms(_STATS['elapsed_e'], "Elapsed (expanded)")
         logging.info(f"Ignored: {_STATS['ignored']:.0f}")
         logging.info(f"Expanded: {_STATS['expanded']:.0f}")
-        logging.info(f"Cached: {_STATS['cached']:.0f} ({_STATS['cached_retrieved']:.0f} hits)")
-        logging.info(f"Errors: {_STATS['error']:.0f} ({_STATS['timeout']:.0f} timed out)")
+        logging.info(f"Cached: {_STATS['cached']:.0f} "
+                     "({_STATS['cached_retrieved']:.0f} hits)")
+        logging.info(f"Errors: {_STATS['error']:.0f} "
+                     "({_STATS['timeout']:.0f} timed out)")
 
 
 def _log_elapsed_ms(seq: List[float], what: str):
@@ -311,16 +322,18 @@ def _main(args: argparse.Namespace) -> None:
         arguments.
     """
     try:
-        logging.basicConfig(level=args.log_level, format=LOG_FMT, force=True)
-        logging.info(args)
+        logger = logging.getLogger(__package__)
+        logger.setLever(args.log_level)
+        logger.info(args)
         with open(args.input, encoding="utf8") as inputf:
             shorturls = (url.strip(" \n") for url in inputf)
             try:
-                urls = unshorten(*shorturls, no_cache=args.no_cache, 
-                                cache_redis=args.cache_redis, domains=args.domains,
-                                maxlen=args.maxlen)
+                urls = unshorten(*shorturls, no_cache=args.no_cache,
+                                 cache_redis=args.cache_redis,
+                                 domains=args.domains, maxlen=args.maxlen)
             except redis.ConnectionError:
-                logging.error("Failed to connect to redis cache! Is Redis running?")
+                logger.error("Failed to connect to redis cache! "
+                             "Is Redis running?")
                 import sys
                 sys.exit(1)
         with open(args.output, "w", encoding="utf8") as outf:
