@@ -59,10 +59,13 @@ def make_parser() -> argparse.ArgumentParser:
     Returns:
         An argparse.ArgumentParser object configured with the script's options.
     """
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     epilog="By default, results will be "
+                                     "cached in memory for faster execution.")
     parser.set_defaults(log_level="INFO",
                         domains=_load_builtin_domains(DOMAINS),
-                        no_cache=False)
+                        no_cache=False,
+                        cache_redis=False)
     parser.add_argument("input")
     parser.add_argument("output")
     parser.add_argument("-m",
@@ -84,9 +87,13 @@ def make_parser() -> argparse.ArgumentParser:
                         nargs="+",
                         metavar="DOMAIN",
                         help="Expand if URL is from %(metavar)s")
-    parser.add_argument("--no-cache",
-                        action="store_true",
-                        help="disable cache")
+    caching = parser.add_mutually_exclusive_group()
+    caching.add_argument("--no-cache",
+                         action="store_true",
+                         help="Disable caching")
+    caching.add_argument("--cache-redis",
+                         action="store_true",
+                         help="Store caching on Redis DB (see below)")
     parser.add_argument("-q", "--quiet",
                         action="store_const",
                         const="WARN",
@@ -96,26 +103,20 @@ def make_parser() -> argparse.ArgumentParser:
                         action="store_const",
                         const="DEBUG",
                         dest="log_level")
-    parser.add_argument("--cache-redis",
-                        action="store_true",
-                        help="use redis cache")
     parser.add_argument("--cache-redis-host",
                         metavar="HOST",
                         default='localhost',
-                        help="Connect to this host for Redis (default: "
-                        "%(default)s)")
+                        help="Redis host [default: %(default)s]")
     parser.add_argument("--cache-redis-port",
                         metavar="PORT",
                         type=int,
                         default=6379,
-                        help="Connect to this port for Redis (default: "
-                        "%(default)d)")
+                        help="Redis port [default: %(default)d]")
     parser.add_argument("--cache-redis-db",
                         metavar="DB",
                         type=int,
                         default=0,
-                        help="Connect to this db for Redis (default: "
-                        "%(default)d)")
+                        help="Redis database [default: %(default)d]")
     return parser
 
 
@@ -290,6 +291,11 @@ def unshorten(*args, **kwargs) -> List[str]:
 
     Returns:
         A list of the expanded URLs.
+
+    Notes:
+        By default no_cache is set to True as we make no assumptions about how
+        this function is called. This is more friendly to third-party tools. If
+        used from the command line, the cache is by default turned on.
     """
     try:
         return asyncio.run(_unshorten(*args, **kwargs))
